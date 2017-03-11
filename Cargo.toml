@@ -1,0 +1,6 @@
+[package]
+name = "lwobj"
+version = "0.1.0"
+authors = ["Thibaud Lambert <thibaud.lambert@gmail.com>"]
+
+[dependencies]
