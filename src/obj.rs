@@ -11,12 +11,23 @@ pub enum LoadingError {
     Io(io::Error),
 }
 
-/// A struct containing all data store by wavefront
+/// A struct containing all data store by wavefront.
 pub struct ObjData {
-    vertices : Vec<(f32,f32,f32,f32)>,
-    normals : Vec<(f32,f32,f32)>,
-    texcoords : Vec<(f32,f32,f32)>,
-    faces : Vec<Vec<(usize,Option<usize>,Option<usize>)>>
+    /// List of vertices `(x,y,z,w)`.
+    /// Its coordinates are (x,y,z) and w is the weight for rational curves and surfaces.
+    pub vertices : Vec<(f32,f32,f32,f32)>,
+    /// List of normal vector with componetns `(x,y,z)`.
+    pub normals : Vec<(f32,f32,f32)>,
+    /// List of texture coordinates `(u,v,w)`.
+    /// u and v are the value for the horizontal and vertical direction.
+    /// w is the value for the depth of the texture.
+    pub texcoords : Vec<(f32,f32,f32)>,
+    /// List of faces.
+    /// Each Face is a list of `(v,vt,vn)`.
+    /// v is the index of vertex.
+    /// vt is the index of its texture coordinate if it has one.
+    /// vn is the index of its normal vector if it has one.
+    pub faces : Vec<Vec<(usize,Option<usize>,Option<usize>)>>
 }
 
 impl From<io::Error> for LoadingError {
@@ -38,7 +49,6 @@ fn parse<T : FromStr>(it : SplitWhitespace, nb : usize) -> Result<Vec<T>, Loadin
 }
 
 impl ObjData {
-
     /// Constructs a new empty `ObjData`.
     ///
     /// # Examples
@@ -104,6 +114,8 @@ impl ObjData {
                             data.texcoords.push((args[0],args[1],args[2]));
                         } else if args.len() == 2 {
                             data.texcoords.push((args[0],args[1],0.));
+                        } else if args.len() == 1 {
+                            data.texcoords.push((args[0],0.,0.));
                         } else {
                             return Err(LoadingError::WrongNumberOfArguments(nb));
                         }
@@ -119,11 +131,17 @@ impl ObjData {
                                 return Err(LoadingError::WrongNumberOfArguments(nb));
                             }
                             let v = match index[0].parse::<usize>() {
-                                Ok(val) => val,
+                                Ok(val) => val-1,
                                 Err(_) => return Err(LoadingError::Parse(nb)),
                             };
-                            let vt = index[1].parse::<usize>().ok();
-                            let vn = index[2].parse::<usize>().ok();
+                            let vt = match index[1].parse::<usize>().ok() {
+                                    Some(val) => Some(val-1),
+                                    None => None,
+                            };
+                            let vn = match index[2].parse::<usize>().ok() {
+                                    Some(val) => Some(val-1),
+                                    None => None,
+                            };
                             vec.push((v,vt,vn));
                         }
                         data.faces.push(vec);
@@ -164,18 +182,18 @@ mod tests {
         (0.,0.,1.),
         (-1.,0.,0.),
         (0.,0.,-1.)];
-        expected.faces = vec![ vec![(2,None,Some(1)), (4,None,Some(1)), (1,None,Some(1))],
-        vec![(8,None,Some(2)), (6,None,Some(2)), (5,None,Some(2))],
+        expected.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
+        vec![(7,None,Some(1)), (5,None,Some(1)), (4,None,Some(1))],
+        vec![(4,None,Some(2)), (1,None,Some(2)), (0,None,Some(2))],
         vec![(5,None,Some(3)), (2,None,Some(3)), (1,None,Some(3))],
-        vec![(6,None,Some(4)), (3,None,Some(4)), (2,None,Some(4))],
-        vec![(3,None,Some(5)), (8,None,Some(5)), (4,None,Some(5))],
-        vec![(1,None,Some(6)), (8,None,Some(6)), (5,None,Some(6))],
-        vec![(2,None,Some(1)), (3,None,Some(1)), (4,None,Some(1))],
-        vec![(8,None,Some(2)), (7,None,Some(2)), (6,None,Some(2))],
+        vec![(2,None,Some(4)), (7,None,Some(4)), (3,None,Some(4))],
+        vec![(0,None,Some(5)), (7,None,Some(5)), (4,None,Some(5))],
+        vec![(1,None,Some(0)), (2,None,Some(0)), (3,None,Some(0))],
+        vec![(7,None,Some(1)), (6,None,Some(1)), (5,None,Some(1))],
+        vec![(4,None,Some(2)), (5,None,Some(2)), (1,None,Some(2))],
         vec![(5,None,Some(3)), (6,None,Some(3)), (2,None,Some(3))],
-        vec![(6,None,Some(4)), (7,None,Some(4)), (3,None,Some(4))],
-        vec![(3,None,Some(5)), (7,None,Some(5)), (8,None,Some(5))],
-        vec![(1,None,Some(6)), (4,None,Some(6)), (8,None,Some(6))],
+        vec![(2,None,Some(4)), (6,None,Some(4)), (7,None,Some(4))],
+        vec![(0,None,Some(5)), (3,None,Some(5)), (7,None,Some(5))],
         ];
         let f = File::open("cube.obj").unwrap();
         let mut input = BufReader::new(f);
