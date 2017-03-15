@@ -1,8 +1,8 @@
 use std::io::BufRead;
 use std::io::Write;
 use std::io;
-use std::str::SplitWhitespace;
 use std::str::FromStr;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub enum LoadingError {
@@ -10,6 +10,18 @@ pub enum LoadingError {
     WrongNumberOfArguments(usize),
     Parse(usize),
     Io(io::Error),
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Group {
+    pub name : String,
+    pub indexes : HashSet<usize>,
+}
+
+#[derive(PartialEq, PartialOrd,Debug)]
+pub struct Object {
+    pub name : String,
+    pub primitives : Vec<usize>
 }
 
 /// A struct containing all data store by wavefront.
@@ -28,7 +40,11 @@ pub struct ObjData {
     /// v is the index of vertex.
     /// vt is the index of its texture coordinate if it has one.
     /// vn is the index of its normal vector if it has one.
-    pub faces : Vec<Vec<(usize,Option<usize>,Option<usize>)>>
+    pub faces : Vec<Vec<(usize,Option<usize>,Option<usize>)>>,
+    /// List of Objects
+    pub objects : Vec<Object>,
+    /// List of groups
+    pub groups : Vec<Group>
 }
 
 impl From<io::Error> for LoadingError {
@@ -37,7 +53,7 @@ impl From<io::Error> for LoadingError {
     }
 }
 
-fn parse<T : FromStr>(it : SplitWhitespace, nb : usize) -> Result<Vec<T>, LoadingError> {
+fn parse<T : FromStr>(it : Vec<&str>, nb : usize) -> Result<Vec<T>, LoadingError> {
     let mut vec : Vec<T> = Vec::new();
     for s in it {
         let val = match s.parse::<T>() {
@@ -48,6 +64,25 @@ fn parse<T : FromStr>(it : SplitWhitespace, nb : usize) -> Result<Vec<T>, Loadin
     }
     return Ok(vec);
 }
+
+impl Group {
+    pub fn new(n : String) -> Group {
+        Group {
+            name : n,
+            indexes : HashSet::new()
+        }
+    }
+}
+
+impl Object {
+    pub fn new(n : String) -> Object {
+        Object {
+            name : n,
+            primitives : Vec::new()
+        }
+    }
+}
+
 
 impl ObjData {
     /// Constructs a new empty `ObjData`.
@@ -65,6 +100,8 @@ impl ObjData {
             normals : Vec::new(),
             texcoords : Vec::new(),
             faces : Vec::new(),
+            objects : Vec::new(),
+            groups : Vec::new(),
         }
     }
 
@@ -85,47 +122,52 @@ impl ObjData {
         let mut data = ObjData::new();
         let mut buf = String::new();
         let mut nb : usize = 0;
+        let mut actif_groups : Vec<usize> = Vec::new();
+        let mut obj : Option<usize> = None;
         while try!(input.read_line(&mut buf)) > 0 {
             // Skip comment
             if buf.chars().next().unwrap() != '#' {
                 let mut iter = buf.split_whitespace();
-                match iter.next() {
-                    Some("v") => {
-                        let args = try!(parse::<f32>(iter,nb));
-                        if args.len() == 4 {
-                            data.vertices.push((args[0],args[1],args[2],args[3]));
-                        } else if args.len() == 3 {
-                            data.vertices.push((args[0],args[1],args[2],1.0));
+                let identifier = iter.next();
+                let args : Vec<_> = iter.collect();
+                if identifier.is_none() {continue;}
+                match identifier.unwrap() {
+                    "v" => {
+                        let values = try!(parse::<f32>(args,nb));
+                        if values.len() == 4 {
+                            data.vertices.push((values[0],values[1],values[2],values[3]));
+                        } else if values.len() == 3 {
+                            data.vertices.push((values[0],values[1],values[2],1.0));
                         } else {
                             return Err(LoadingError::WrongNumberOfArguments(nb));
                         }
                     },
-                    Some("vn") => {
-                        let args = try!(parse::<f32>(iter,nb));
-                        if args.len() == 3 {
-                            data.normals.push((args[0],args[1],args[2]));
+                    "vn" => {
+                        let values = try!(parse::<f32>(args,nb));
+                        if values.len() == 3 {
+                            data.normals.push((values[0],values[1],values[2]));
                         } else {
                             return Err(LoadingError::WrongNumberOfArguments(nb));
                         }
                     },
-                    Some("vt") => {
-                        let args = try!(parse::<f32>(iter,nb));
-                        if args.len() == 3 {
-                            data.texcoords.push((args[0],args[1],args[2]));
-                        } else if args.len() == 2 {
-                            data.texcoords.push((args[0],args[1],0.));
-                        } else if args.len() == 1 {
-                            data.texcoords.push((args[0],0.,0.));
+                    "vt" => {
+                        let values = try!(parse::<f32>(args,nb));
+                        if values.len() == 3 {
+                            data.texcoords.push((values[0],values[1],values[2]));
+                        } else if values.len() == 2 {
+                            data.texcoords.push((values[0],values[1],0.));
+                        } else if values.len() == 1 {
+                            data.texcoords.push((values[0],0.,0.));
                         } else {
                             return Err(LoadingError::WrongNumberOfArguments(nb));
                         }
                     },
-                    Some("s") => {
+                    "s" => {
                         // Not supported
                     },
-                    Some("f") => {
+                    "f" => {
                         let mut vec : Vec<(usize,Option<usize>,Option<usize>)> = Vec::new();
-                        for arg in iter {
+                        for arg in args {
                             let index : Vec<_> = arg.split('/').collect();
                             if index.len() != 3 {
                                 return Err(LoadingError::WrongNumberOfArguments(nb));
@@ -145,9 +187,44 @@ impl ObjData {
                             vec.push((v,vt,vn));
                         }
                         data.faces.push(vec);
+                        if obj.is_none() {
+                            data.objects.push(Object::new(String::new()));
+                            obj = Some(data.objects.len()-1);
+                        }
+                        data.objects[obj.unwrap()].primitives.push(data.faces.len()-1);
+                        for g in actif_groups.iter() {
+                            data.groups[*g].indexes.insert(data.faces.len()-1);
+                        }
                     },
-                    Some("o") => {
-                        // Not supported
+                    "o" => {
+                        if args.len() == 0 {
+                            return Err(LoadingError::WrongNumberOfArguments(nb));
+                        }
+                        let mut name = String::new();
+                        let mut args_it = args.iter();
+                        name += args_it.next().unwrap();
+                        for arg in args_it {
+                            name += " ";
+                            name += arg;
+                        }
+                        data.objects.push(Object::new(String::from(name)));
+                        obj = Some(data.objects.len()-1);
+                    },
+                    "g" => {
+                        actif_groups.clear();
+                        for arg in args {
+                            let mut found = false;
+                            for (i,g) in data.groups.iter().enumerate() {
+                                if g.name == arg {
+                                    actif_groups.push(i);
+                                    found = true;
+                                }
+                            }
+                            if !found {
+                                data.groups.push(Group::new(String::from(arg)));
+                                actif_groups.push(data.groups.len()-1);
+                            }
+                        }
                     },
                     _ => return Err(LoadingError::InvalidLine(nb)),
                 }
@@ -195,21 +272,46 @@ impl ObjData {
         }
 
         // Write faces
-        for indexes in &self.faces {
-            try!(output.write_all("f".as_bytes()));
-            for &(v,vt,vn) in indexes {
-                let vt_str = match vt {
-                    Some(val) => (val+1).to_string(),
-                    None => "".to_string(),
-                };
-                let vn_str = match vn {
-                    Some(val) => (val+1).to_string(),
-                    None => "".to_string(),
-                };
-                let arg : String = format!(" {}/{}/{}",v+1,vt_str,vn_str);
-                try!(output.write_all(arg.as_bytes()));
+        let mut actif_groups : Vec<usize> = Vec::new();
+        for o in &self.objects {
+            if o.name != String::new() {
+                let line : String = format!("o {}\n",o.name);
+                try!(output.write_all(line.as_bytes()));
             }
-            try!(output.write_all("\n".as_bytes()));
+            for i in &o.primitives {
+                let mut groups : Vec<usize> = Vec::new();
+                for (j,g) in self.groups.iter().enumerate() {
+                    if g.indexes.contains(i) {
+                        groups.push(j);
+                    }
+                }
+                if actif_groups != groups {
+                    actif_groups = groups;
+                    try!(output.write_all("g".as_bytes()));
+                    for g in &actif_groups {
+                        println!("{}",*g);
+                        println!("{}",self.groups.len());
+                        try!(output.write_all(" ".as_bytes()));
+                        try!(output.write_all(&self.groups[*g].name.as_bytes()));
+                    }
+                    try!(output.write_all("\n".as_bytes()));
+                }
+
+                try!(output.write_all("f".as_bytes()));
+                for &(v,vt,vn) in &self.faces[*i] {
+                    let vt_str = match vt {
+                        Some(val) => (val+1).to_string(),
+                        None => "".to_string(),
+                    };
+                    let vn_str = match vn {
+                        Some(val) => (val+1).to_string(),
+                        None => "".to_string(),
+                    };
+                    let arg : String = format!(" {}/{}/{}",v+1,vt_str,vn_str);
+                    try!(output.write_all(arg.as_bytes()));
+                }
+                try!(output.write_all("\n".as_bytes()));
+            }
         }
         Ok(())
     }
@@ -252,6 +354,11 @@ mod tests {
         vec![(2,None,Some(4)), (6,None,Some(4)), (7,None,Some(4))],
         vec![(0,None,Some(5)), (3,None,Some(5)), (7,None,Some(5))],
         ];
+        let obj = Object {
+            name : String::from("Cube"),
+            primitives : vec![0,1,2,3,4,5,6,7,8,9,10,11]
+        };
+        expected.objects = vec![obj];
         let f = File::open("cube.obj").unwrap();
         let mut input = BufReader::new(f);
         let data = ObjData::load(&mut input).ok().unwrap();
@@ -259,6 +366,7 @@ mod tests {
         assert_eq!(expected.normals,data.normals);
         assert_eq!(expected.texcoords,data.texcoords);
         assert_eq!(expected.faces,data.faces);
+        assert_eq!(expected.objects,data.objects);
     }
 
     #[test]
@@ -291,6 +399,11 @@ mod tests {
         vec![(2,None,Some(4)), (6,None,Some(4)), (7,None,Some(4))],
         vec![(0,None,Some(5)), (3,None,Some(5)), (7,None,Some(5))],
         ];
+        let obj = Object {
+            name : String::from("Cube"),
+            primitives : vec![0,1,2,3,4,5,6,7,8,9,10,11]
+        };
+        expected.objects = vec![obj];
         {
             let f2 = File::create("tmp.obj").unwrap();
             let mut output = BufWriter::new(f2);
@@ -303,6 +416,27 @@ mod tests {
         assert_eq!(expected.normals,data.normals);
         assert_eq!(expected.texcoords,data.texcoords);
         assert_eq!(expected.faces,data.faces);
+    }
+
+    #[test]
+    fn read_write_read() {
+        let f = File::open("cube.obj").unwrap();
+        let mut input = BufReader::new(f);
+        let data = ObjData::load(&mut input).ok().unwrap();
+        {
+            let f2 = File::create("rwr.obj").unwrap();
+            let mut output = BufWriter::new(f2);
+            assert!(data.write(&mut output).is_ok());
+        }
+        let f1 = File::open("rwr.obj").unwrap();
+        let mut input = BufReader::new(f1);
+        let reload = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(reload.vertices,data.vertices);
+        assert_eq!(reload.normals,data.normals);
+        assert_eq!(reload.texcoords,data.texcoords);
+        assert_eq!(reload.faces,data.faces);
+        assert_eq!(reload.objects,data.objects);
+        assert_eq!(reload.groups,data.groups);
     }
 
 }
