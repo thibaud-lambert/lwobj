@@ -167,23 +167,30 @@ impl ObjData {
                     },
                     "f" => {
                         let mut vec : Vec<(usize,Option<usize>,Option<usize>)> = Vec::new();
+                        if args.len() < 3 {return Err(LoadingError::WrongNumberOfArguments(nb))}
                         for arg in args {
                             let index : Vec<_> = arg.split('/').collect();
-                            if index.len() != 3 {
+                            if index.len() == 0 || index.len() > 3 {
                                 return Err(LoadingError::WrongNumberOfArguments(nb));
                             }
                             let v = match index[0].parse::<usize>() {
                                 Ok(val) => val-1,
                                 Err(_) => return Err(LoadingError::Parse(nb)),
                             };
-                            let vt = match index[1].parse::<usize>().ok() {
-                                Some(val) => Some(val-1),
-                                None => None,
-                            };
-                            let vn = match index[2].parse::<usize>().ok() {
-                                Some(val) => Some(val-1),
-                                None => None,
-                            };
+                            let mut vt = None;
+                            if index.len() >= 2 {
+                                vt = match index[1].parse::<usize>().ok() {
+                                    Some(val) => Some(val-1),
+                                    None => None,
+                                };
+                            }
+                            let mut vn = None;
+                            if index.len() == 3 {
+                                vn = match index[2].parse::<usize>().ok() {
+                                    Some(val) => Some(val-1),
+                                    None => None,
+                                };
+                            }
                             vec.push((v,vt,vn));
                         }
                         data.faces.push(vec);
@@ -319,124 +326,204 @@ impl ObjData {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use std::io::BufReader;
     use std::io::BufWriter;
     use obj::*;
 
     #[test]
-    fn load() {
-        let mut expected = ObjData::new();
-        expected.vertices = vec![(1.,-1.,-1.,1.),
-        (1.,-1.,1.,1.),
-        (-1.,-1.,1.,1.),
-        (-1.,-1.,-1.,1.),
-        (1.,1.,-1.,1.),
-        (1.,1.,1.,1.),
-        (-1.,1.,1.,1.),
-        (-1.,1.,-1.,1.)];
-        expected.normals = vec![(0.,-1.,0.),
-        (0.,1.,0.),
-        (1.,0.,0.),
-        (0.,0.,1.),
-        (-1.,0.,0.),
-        (0.,0.,-1.)];
-        expected.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
-        vec![(7,None,Some(1)), (5,None,Some(1)), (4,None,Some(1))],
-        vec![(4,None,Some(2)), (1,None,Some(2)), (0,None,Some(2))],
-        vec![(5,None,Some(3)), (2,None,Some(3)), (1,None,Some(3))],
-        vec![(2,None,Some(4)), (7,None,Some(4)), (3,None,Some(4))],
-        vec![(0,None,Some(5)), (7,None,Some(5)), (4,None,Some(5))],
-        vec![(1,None,Some(0)), (2,None,Some(0)), (3,None,Some(0))],
-        vec![(7,None,Some(1)), (6,None,Some(1)), (5,None,Some(1))],
-        vec![(4,None,Some(2)), (5,None,Some(2)), (1,None,Some(2))],
-        vec![(5,None,Some(3)), (6,None,Some(3)), (2,None,Some(3))],
-        vec![(2,None,Some(4)), (6,None,Some(4)), (7,None,Some(4))],
-        vec![(0,None,Some(5)), (3,None,Some(5)), (7,None,Some(5))],
-        ];
-        let obj = Object {
-            name : String::from("Cube"),
-            primitives : vec![0,1,2,3,4,5,6,7,8,9,10,11]
+    fn load_invalid_line() {
+        let obj_str =
+        r#"o Test
+        az 1. -2.00 -3.5
+        v 1 -1 3.
+        v -1 -1d 1 0.5
+        v -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::InvalidLine(line) => assert!(line == 1),
+            _ => assert!(false),
         };
-        expected.objects = vec![obj];
-        let f = File::open("cube.obj").unwrap();
-        let mut input = BufReader::new(f);
-        let data = ObjData::load(&mut input).ok().unwrap();
-        assert_eq!(expected.vertices,data.vertices);
-        assert_eq!(expected.normals,data.normals);
-        assert_eq!(expected.texcoords,data.texcoords);
-        assert_eq!(expected.faces,data.faces);
-        assert_eq!(expected.objects,data.objects);
     }
 
     #[test]
-    fn write() {
-        let mut expected = ObjData::new();
-        expected.vertices = vec![(1.,-1.,-1.,1.),
+    fn load_vertices() {
+        let expected = vec![(1.,-2.,-3.5,1f32),
         (1.,-1.,1.,1.),
-        (-1.,-1.,1.,1.),
-        (-1.,-1.,-1.,1.),
-        (1.,1.,-1.,1.),
-        (1.,1.,1.,1.),
-        (-1.,1.,1.,1.),
-        (-1.,1.,-1.,1.)];
-        expected.normals = vec![(0.,-1.,0.),
-        (0.,1.,0.),
-        (1.,0.,0.),
-        (0.,0.,1.),
-        (-1.,0.,0.),
-        (0.,0.,-1.)];
-        expected.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
-        vec![(7,None,Some(1)), (5,None,Some(1)), (4,None,Some(1))],
-        vec![(4,None,Some(2)), (1,None,Some(2)), (0,None,Some(2))],
-        vec![(5,None,Some(3)), (2,None,Some(3)), (1,None,Some(3))],
-        vec![(2,None,Some(4)), (7,None,Some(4)), (3,None,Some(4))],
-        vec![(0,None,Some(5)), (7,None,Some(5)), (4,None,Some(5))],
-        vec![(1,None,Some(0)), (2,None,Some(0)), (3,None,Some(0))],
-        vec![(7,None,Some(1)), (6,None,Some(1)), (5,None,Some(1))],
-        vec![(4,None,Some(2)), (5,None,Some(2)), (1,None,Some(2))],
-        vec![(5,None,Some(3)), (6,None,Some(3)), (2,None,Some(3))],
-        vec![(2,None,Some(4)), (6,None,Some(4)), (7,None,Some(4))],
-        vec![(0,None,Some(5)), (3,None,Some(5)), (7,None,Some(5))],
-        ];
-        let obj = Object {
-            name : String::from("Cube"),
-            primitives : vec![0,1,2,3,4,5,6,7,8,9,10,11]
-        };
-        expected.objects = vec![obj];
-        {
-            let f2 = File::create("tmp.obj").unwrap();
-            let mut output = BufWriter::new(f2);
-            assert!(expected.write(&mut output).is_ok());
-        }
-        let f1 = File::open("tmp.obj").unwrap();
-        let mut input = BufReader::new(f1);
+        (-1.,-1.,1.,0.5),
+        (-1.,-1.,-1.,1.)];
+        let obj_str =
+        r#"o Test
+        v 1. -2.00 -3.5
+        v 1 -1 1
+        v -1 -1 1 0.5
+        v -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
         let data = ObjData::load(&mut input).ok().unwrap();
-        assert_eq!(expected.vertices,data.vertices);
-        assert_eq!(expected.normals,data.normals);
-        assert_eq!(expected.texcoords,data.texcoords);
-        assert_eq!(expected.faces,data.faces);
+        assert_eq!(expected,data.vertices);
     }
 
     #[test]
-    fn read_write_read() {
-        let f = File::open("cube.obj").unwrap();
-        let mut input = BufReader::new(f);
-        let data = ObjData::load(&mut input).ok().unwrap();
-        {
-            let f2 = File::create("rwr.obj").unwrap();
-            let mut output = BufWriter::new(f2);
-            assert!(data.write(&mut output).is_ok());
-        }
-        let f1 = File::open("rwr.obj").unwrap();
-        let mut input = BufReader::new(f1);
-        let reload = ObjData::load(&mut input).ok().unwrap();
-        assert_eq!(reload.vertices,data.vertices);
-        assert_eq!(reload.normals,data.normals);
-        assert_eq!(reload.texcoords,data.texcoords);
-        assert_eq!(reload.faces,data.faces);
-        assert_eq!(reload.objects,data.objects);
-        assert_eq!(reload.groups,data.groups);
+    fn load_vertices_wrong_number_of_arguments() {
+        let obj_str =
+        r#"o Test
+        v 1. -2.00 -3.5
+        v 1 -1
+        v -1 -1 1 0.5
+        v -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 2),
+            _ => assert!(false),
+        };
     }
 
+    #[test]
+    fn load_vertices_parse_err() {
+        let obj_str =
+        r#"o Test
+        v 1. -2.00 -3.5
+        v 1 -1 3.
+        v -1 -1d 1 0.5
+        v -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::Parse(line) => assert!(line == 3),
+            _ => assert!(false),
+        };
+    }
+
+    #[test]
+    fn load_normals() {
+        let expected = vec![(1.,-2.,-3.5),
+        (1.,-1.,1.),
+        (-1.,-1.,1.),
+        (-1.,-1.,-1.)];
+        let obj_str =
+        r#"o Test
+        vn 1. -2.00 -3.5
+        vn 1 -1 1
+        vn -1 -1 1
+        vn -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.normals);
+    }
+
+    #[test]
+    fn load_normals_wrong_number_of_arguments() {
+        let obj_str =
+        r#"o Test
+        vn 1. -2.00 -3.5
+        vn 1 -1 2. 1
+        vn -1 -1 1
+        vn -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 2),
+            _ => assert!(false),
+        };
+
+        let obj_str =
+        r#"o Test
+        v 1. -2.00 -3.5
+        v 1 -1
+        v -1 -1 1
+        v -1 -1.000000 -1.000000"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 2),
+            _ => assert!(false),
+        };
+    }
+
+    #[test]
+    fn load_texcoords() {
+        let expected = vec![(0.,1.,0.),
+        (0.,0.5,0.),
+        (0f32,1f32,1f32),
+        (1.,1.,0.5)];
+        let obj_str =
+        r#"o Test
+        vt 0. 1.00
+        vt 0 0.5
+        vt 0 1 1
+        vt 1 1. 0.5"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.texcoords);
+    }
+
+    #[test]
+    fn load_faces() {
+        let expected = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
+        vec![(7,None,None), (5,None,None), (4,None,None)],
+        vec![(3,None,None), (4,None,None), (5,None,None)],
+        vec![(7,Some(2),Some(1)), (5,Some(4),Some(2)), (4,Some(6),Some(0))],
+        vec![(8,Some(3),None), (6,Some(2),None), (2,Some(1),None)],
+        ];
+        let obj_str =
+        r#"o Test
+        f 2//1 4//1 1//1
+        f 8 6 5
+        f 4// 5// 6//
+        f 8/3/2 6/5/3 5/7/1
+        f 9/4/ 7/3/ 3/2/"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.faces);
+    }
+
+    #[test]
+    fn load_faces_wrong_number_of_arguments() {
+        let obj_str =
+        r#"o Test
+        f 2//1 4//1 1//1
+        f 8 6 5
+        f 4/// 5// 6//
+        f 8/3/2 6/5/3 5/7/1"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 3),
+            _ => assert!(false),
+        };
+
+        let obj_str =
+        r#"o Test
+        f 2//1 4//1 1//1
+        f 8 6
+        f 4// 5// 6//
+        f 8/3/2 6/5/3 5/7/1
+        f 9/4/ 7/3/ 3/2/"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 2),
+            _ => assert!(false),
+        };
+    }
+
+    #[test]
+    fn load_faces_parse_err() {
+        let obj_str =
+        r#"o Test
+        f 2//1 4//1 1//1
+        f 8.5 6 5
+        f 4// 5// 6//"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::Parse(line) => assert!(line == 2),
+            _ => assert!(false),
+        };
+    }
 }
