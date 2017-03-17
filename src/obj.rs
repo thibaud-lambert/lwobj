@@ -526,4 +526,120 @@ mod tests {
             _ => assert!(false),
         };
     }
+
+    #[test]
+    fn load_object_wrong_number_of_arguments() {
+        let obj_str =
+        r#"o
+        f 2//1 4//1 1//1
+        f 8.5 6 5
+        f 4// 5// 6//"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        match ObjData::load(&mut input).err().unwrap() {
+            LoadingError::WrongNumberOfArguments(line) => assert!(line == 0),
+            _ => assert!(false),
+        };
+    }
+
+    #[test]
+    fn load_unamed_object() {
+        let obj = Object {
+            name : String::from(""),
+            primitives : vec![0,1,2,3,4]
+        };
+        let expected = vec![obj];
+        let obj_str =
+        r#"f 2//1 4//1 1//1
+        f 8 6 5
+        f 4// 5// 6//
+        f 8/3/2 6/5/3 5/7/1
+        f 9/4/ 7/3/ 3/2/"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.objects);
+    }
+
+    #[test]
+    fn load_object() {
+        let obj = Object {
+            name : String::from("Cube"),
+            primitives : vec![0,1,2,3,4]
+        };
+        let expected = vec![obj];
+        let obj_str =
+        r#"o Cube
+        f 2//1 4//1 1//1
+        f 8 6 5
+        f 4// 5// 6//
+        f 8/3/2 6/5/3 5/7/1
+        f 9/4/ 7/3/ 3/2/"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.objects);
+    }
+
+    #[test]
+    fn load_several_objects() {
+        let obj1 = Object {
+            name : String::from(""),
+            primitives : vec![0,1,2,]
+        };
+        let obj2 = Object {
+            name : String::from("Cube"),
+            primitives : vec![3,4]
+        };
+        let obj3 = Object {
+            name : String::from("Test"),
+            primitives : vec![5]
+        };
+        let expected = vec![obj1,obj2,obj3];
+        let obj_str =
+        r#"f 2//1 4//1 1//1
+        f 8 6 5
+        f 4// 5// 6//
+        o Cube
+        f 8/3/2 6/5/3 5/7/1
+        f 9/4/ 7/3/ 3/2/
+        o Test
+        f 4 3 5"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.objects);
+    }
+
+    #[test]
+    fn load_group() {
+        let gr1 = Group {
+            name : String::from("gr1"),
+            indexes : vec!(0,1,2,3).into_iter().collect()
+        };
+        let gr2 = Group {
+            name : String::from("gr2"),
+            indexes : vec!(0,1,5).into_iter().collect()
+        };
+        let gr3 = Group {
+            name : String::from("gr3"),
+            indexes : vec!(4).into_iter().collect()
+        };
+        let expected = vec![gr1,gr2,gr3];
+        let obj_str =
+        r#"g gr1 gr2
+        f 2//1 4//1 1//1
+        f 8 6 5
+        g gr1
+        f 4// 5// 6//
+        f 8/3/2 6/5/3 5/7/1
+        g gr3
+        f 9/4/ 7/3/ 3/2/
+        g gr2
+        f 9/4/ 7/3/ 3/2/"#;
+
+        let mut input = BufReader::new(obj_str.as_bytes());
+        let data = ObjData::load(&mut input).ok().unwrap();
+        assert_eq!(expected,data.groups);
+    }        
 }

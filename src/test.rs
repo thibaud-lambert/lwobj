@@ -83,6 +83,19 @@ fn write() {
         primitives : vec![0,1,2,3,4,5,6,7,8,9,10,11]
     };
     expected.objects = vec![obj];
+    let gr1 = Group {
+        name : String::from("group1"),
+        indexes : vec!(3,4,5,6,7,8).into_iter().collect()
+    };
+    let gr2 = Group {
+        name : String::from("group2"),
+        indexes : vec!(3,4,5).into_iter().collect()
+    };
+    let gr3 = Group {
+        name : String::from("group3"),
+        indexes : vec!(9,10,11).into_iter().collect()
+    };
+    expected.groups = vec![gr1,gr2,gr3];
     {
         let f2 = File::create("tmp.obj").unwrap();
         let mut output = BufWriter::new(f2);
@@ -95,6 +108,8 @@ fn write() {
     assert_eq!(expected.normals,data.normals);
     assert_eq!(expected.texcoords,data.texcoords);
     assert_eq!(expected.faces,data.faces);
+    assert_eq!(expected.objects,data.objects);
+    assert_eq!(expected.groups,data.groups);
 }
 
 #[test]
