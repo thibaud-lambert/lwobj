@@ -296,8 +296,6 @@ impl ObjData {
                     actif_groups = groups;
                     try!(output.write_all("g".as_bytes()));
                     for g in &actif_groups {
-                        println!("{}",*g);
-                        println!("{}",self.groups.len());
                         try!(output.write_all(" ".as_bytes()));
                         try!(output.write_all(&self.groups[*g].name.as_bytes()));
                     }
@@ -328,6 +326,7 @@ impl ObjData {
 mod tests {
     use std::io::BufReader;
     use std::io::BufWriter;
+    use std::str;
     use obj::*;
 
     #[test]
@@ -641,5 +640,166 @@ mod tests {
         let mut input = BufReader::new(obj_str.as_bytes());
         let data = ObjData::load(&mut input).ok().unwrap();
         assert_eq!(expected,data.groups);
-    }        
+    }
+
+    #[test]
+    fn write_vertices() {
+        let mut data = ObjData::new();
+        data.vertices = vec![(1.,-2.,-3.5,1f32),
+        (1.,-1.,1.,1.),
+        (-1.,-1.,1.,0.5),
+        (-1.,-1.,-1.,1.)];
+        let expected =
+        r#"v 1 -2 -3.5 1
+v 1 -1 1 1
+v -1 -1 1 0.5
+v -1 -1 -1 1
+"#;
+
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
+
+    #[test]
+    fn write_normals() {
+        let mut data = ObjData::new();
+        data.normals = vec![(1.,-2.,-3.5),
+        (1.,-1.,1.),
+        (-1.,-1.,1.),
+        (-1.,-1.,-1.)];
+        let expected =
+        r#"vn 1 -2 -3.5
+vn 1 -1 1
+vn -1 -1 1
+vn -1 -1 -1
+"#;
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
+
+
+    #[test]
+    fn write_texcoords() {
+        let mut data = ObjData::new();
+        data.texcoords = vec![(1.,1.,0.5),
+        (0.,0.,0.),
+        (0.5,1.,0.),
+        (1.,0.,1.)];
+        let expected =
+        r#"vt 1 1 0.5
+vt 0 0 0
+vt 0.5 1 0
+vt 1 0 1
+"#;
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
+
+    #[test]
+    fn write_faces() {
+        let mut data = ObjData::new();
+        data.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
+        vec![(7,None,None), (5,None,None), (4,None,None)],
+        vec![(3,None,None), (4,None,None), (5,None,None)],
+        vec![(7,Some(2),Some(1)), (5,Some(4),Some(2)), (4,Some(6),Some(0))],
+        vec![(8,Some(3),None), (6,Some(2),None), (2,Some(1),None)],
+        ];
+        let obj = Object {
+            name : String::from(""),
+            primitives : vec![0,1,2,3,4]
+        };
+        data.objects = vec![obj];
+        let expected =
+        r#"f 2//1 4//1 1//1
+f 8// 6// 5//
+f 4// 5// 6//
+f 8/3/2 6/5/3 5/7/1
+f 9/4/ 7/3/ 3/2/
+"#;
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
+
+    #[test]
+    fn write_objects() {
+        let mut data = ObjData::new();
+        data.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
+        vec![(7,None,None), (5,None,None), (4,None,None)],
+        vec![(3,None,None), (4,None,None), (5,None,None)],
+        vec![(7,Some(2),Some(1)), (5,Some(4),Some(2)), (4,Some(6),Some(0))],
+        vec![(8,Some(3),None), (6,Some(2),None), (2,Some(1),None)],
+        ];
+        let obj1 = Object {
+            name : String::from(""),
+            primitives : vec![0,1]
+        };
+        let obj2 = Object {
+            name : String::from("Test"),
+            primitives : vec![2,3,4]
+        };
+        data.objects = vec![obj1,obj2];
+        let expected =
+        r#"f 2//1 4//1 1//1
+f 8// 6// 5//
+o Test
+f 4// 5// 6//
+f 8/3/2 6/5/3 5/7/1
+f 9/4/ 7/3/ 3/2/
+"#;
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
+
+    #[test]
+    fn write_groups() {
+        let mut data = ObjData::new();
+        data.faces = vec![ vec![(1,None,Some(0)), (3,None,Some(0)), (0,None,Some(0))],
+        vec![(7,None,None), (5,None,None), (4,None,None)],
+        vec![(3,None,None), (4,None,None), (5,None,None)],
+        vec![(7,Some(2),Some(1)), (5,Some(4),Some(2)), (4,Some(6),Some(0))],
+        vec![(8,Some(3),None), (6,Some(2),None), (2,Some(1),None)],
+        ];
+        let obj = Object {
+            name : String::from(""),
+            primitives : vec![0,1,2,3,4]
+        };
+        data.objects = vec![obj];
+        let gr1 = Group {
+            name : String::from("gr1"),
+            indexes : vec!(0,1).into_iter().collect()
+        };
+        let gr2 = Group {
+            name : String::from("gr2"),
+            indexes : vec!(0,1,2).into_iter().collect()
+        };
+        let gr3 = Group {
+            name : String::from("gr3"),
+            indexes : vec!(3,4).into_iter().collect()
+        };
+        data.groups = vec![gr1,gr2,gr3];
+        let expected =
+        r#"g gr1 gr2
+f 2//1 4//1 1//1
+f 8// 6// 5//
+g gr2
+f 4// 5// 6//
+g gr3
+f 8/3/2 6/5/3 5/7/1
+f 9/4/ 7/3/ 3/2/
+"#;
+        let mut output = BufWriter::new(Vec::<u8>::new());
+        assert!(data.write(&mut output).is_ok());
+        let buf = output.into_inner().unwrap();
+        assert_eq!(expected,str::from_utf8(&buf).unwrap());
+    }
 }
